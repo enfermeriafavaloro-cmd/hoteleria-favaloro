@@ -12,6 +12,8 @@ const firebaseConfig = {
 };
 
 const EMAIL_MANTENIMIENTO = "waguirre@ffavaloro.org";
+const CLOUD_NAME    = "gc5vtuov";
+const UPLOAD_PRESET = "hosteleria_unsigned";
 
 const CAMAS = {
   "7*A":  ["701","702","703 A","703 B","704 A","704 B","705","706","707 A","707 B","708","709","711","713"],
@@ -54,6 +56,57 @@ const params  = new URLSearchParams(window.location.search);
 const usuario = params.get('email') || 'usuario@favaloro.org';
 document.getElementById('usuarioActual').textContent = '👤 ' + usuario;
 
+let tipoUbicacion = null;
+
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c =>
+  ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+
+// ── IMÁGENES (Cloudinary) ────────────────────────────────
+function comprimirImagen(file, maxLado = 1280, calidad = 0.7) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      let { width, height } = img;
+      const escala = Math.min(1, maxLado / Math.max(width, height));
+      width  = Math.round(width * escala);
+      height = Math.round(height * escala);
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('No se pudo comprimir')), 'image/jpeg', calidad);
+    };
+    img.onerror = () => reject(new Error('Imagen inválida'));
+    img.src = url;
+  });
+}
+
+async function subirImagen(file) {
+  const blob = await comprimirImagen(file);
+  const fd = new FormData();
+  fd.append('file', blob);
+  fd.append('upload_preset', UPLOAD_PRESET);
+  const resp = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+    method: 'POST', body: fd
+  });
+  if (!resp.ok) throw new Error('Error al subir la imagen');
+  const data = await resp.json();
+  return data.secure_url;
+}
+
+function archivoElegido() {
+  return document.getElementById('foto-cam').files[0] || document.getElementById('foto').files[0];
+}
+
+window.previewFoto = () => {
+  const file = archivoElegido();
+  const img  = document.getElementById('foto-preview');
+  if (!file) { img.style.display = 'none'; img.src = ''; return; }
+  img.src = URL.createObjectURL(file);
+  img.style.display = 'block';
+};
+
 // ── TABS ─────────────────────────────────────────────────
 window.mostrarTab = (tab) => {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -78,17 +131,36 @@ window.actualizarTipos = () => {
   });
 };
 
-// ── SERVICIO → CAMAS ──────────────────────────────────────
-window.actualizarCamas = () => {
+// ── UBICACIÓN ─────────────────────────────────────────────
+window.actualizarUbicacion = () => {
   const servicio = document.getElementById('servicio').value;
-  const selCama  = document.getElementById('cama');
-  selCama.innerHTML = '<option value="">-- Seleccioná cama --</option>';
-  if (!servicio) return;
-  CAMAS[servicio].forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c; opt.textContent = 'Cama ' + c;
-    selCama.appendChild(opt);
-  });
+  tipoUbicacion = null;
+  document.getElementById('bloque-tipo-ubicacion').style.display = servicio ? 'block' : 'none';
+  document.getElementById('bloque-cama').style.display = 'none';
+  document.getElementById('bloque-area').style.display = 'none';
+  document.getElementById('btn-hab').classList.remove('activo');
+  document.getElementById('btn-area').classList.remove('activo');
+  document.getElementById('cama').innerHTML = '<option value="">-- Seleccioná cama --</option>';
+  document.getElementById('area-libre').value = '';
+};
+
+window.elegirUbicacion = (tipo) => {
+  tipoUbicacion = tipo;
+  const servicio = document.getElementById('servicio').value;
+  document.getElementById('btn-hab').classList.toggle('activo', tipo === 'hab');
+  document.getElementById('btn-area').classList.toggle('activo', tipo === 'area');
+  document.getElementById('bloque-cama').style.display = tipo === 'hab'  ? 'block' : 'none';
+  document.getElementById('bloque-area').style.display = tipo === 'area' ? 'block' : 'none';
+
+  if (tipo === 'hab' && servicio) {
+    const selCama = document.getElementById('cama');
+    selCama.innerHTML = '<option value="">-- Seleccioná cama --</option>';
+    CAMAS[servicio].forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c; opt.textContent = 'Cama ' + c;
+      selCama.appendChild(opt);
+    });
+  }
 };
 
 // ── ENVIAR SOLICITUD ──────────────────────────────────────
@@ -96,37 +168,64 @@ window.enviarSolicitud = async () => {
   const destino     = document.getElementById('destino').value;
   const tipo        = document.getElementById('tipo').value;
   const servicio    = document.getElementById('servicio').value;
-  const cama        = document.getElementById('cama').value;
   const descripcion = document.getElementById('descripcion').value.trim();
   const urgencia    = document.getElementById('urgencia').value;
+  const archivo     = archivoElegido();
   const msgEl       = document.getElementById('mensaje-envio');
+  const btn         = document.querySelector('#tab-nueva .btn-primary');
 
-  if (!destino || !tipo || !servicio || !descripcion) {
+  if (!destino || !tipo || !servicio || !tipoUbicacion || !descripcion) {
     msgEl.style.color = '#C8102E';
     msgEl.textContent = '⚠️ Completá todos los campos obligatorios.';
     return;
   }
 
-  const ubicacion = cama ? `${servicio} — Cama ${cama}` : servicio;
+  let ubicacion = servicio;
+  if (tipoUbicacion === 'hab') {
+    const cama = document.getElementById('cama').value;
+    if (!cama) {
+      msgEl.style.color = '#C8102E';
+      msgEl.textContent = '⚠️ Seleccioná una cama.';
+      return;
+    }
+    ubicacion = `${servicio} — Cama ${cama}`;
+  } else {
+    const areaLibre = document.getElementById('area-libre').value.trim();
+    if (!areaLibre) {
+      msgEl.style.color = '#C8102E';
+      msgEl.textContent = '⚠️ Describí el área.';
+      return;
+    }
+    ubicacion = `${servicio} — ${areaLibre}`;
+  }
 
-  const solicitud = {
-    destino, tipo, servicio, cama: cama || 'Sin especificar',
-    ubicacion, descripcion, urgencia,
-    estado: 'pendiente',
-    creadoPor: usuario,
-    fechaCreacion: new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }),
-    timestamp: Date.now()
-  };
+  btn.disabled = true;
+  msgEl.style.color = '#555';
+  msgEl.textContent = archivo ? '⏳ Subiendo foto y enviando...' : '⏳ Enviando...';
 
   try {
+    let fotoSolicitud = '';
+    if (archivo) fotoSolicitud = await subirImagen(archivo);
+
+    const solicitud = {
+      destino, tipo, servicio, tipoUbicacion, ubicacion,
+      descripcion, urgencia,
+      fotoSolicitud,
+      estado: 'pendiente',
+      creadoPor: usuario,
+      fechaCreacion: new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }),
+      timestamp: Date.now()
+    };
+
     await push(ref(db, 'hosteleria/solicitudes'), solicitud);
 
     if (destino === 'mantenimiento') {
       const asunto = encodeURIComponent(`[${urgencia.toUpperCase()}] Mantenimiento - ${ubicacion}`);
       const cuerpo = encodeURIComponent(
-        `Tipo: ${tipo}\nUbicación: ${ubicacion}\nDescripción: ${descripcion}\nUrgencia: ${urgencia}\nSolicitado por: ${usuario}`
+        `Tipo: ${tipo}\nUbicación: ${ubicacion}\nDescripción: ${descripcion}\nUrgencia: ${urgencia}\nSolicitado por: ${usuario}` +
+        (fotoSolicitud ? `\nFoto: ${fotoSolicitud}` : '')
       );
-      window.open(`mailto:${EMAIL_MANTENIMIENTO}?subject=${asunto}&body=${cuerpo}`);
+      window.location.href = `mailto:${EMAIL_MANTENIMIENTO}?subject=${asunto}&body=${cuerpo}`;
     }
 
     msgEl.style.color = '#155724';
@@ -135,16 +234,25 @@ window.enviarSolicitud = async () => {
     document.getElementById('destino').value = '';
     document.getElementById('tipo').innerHTML = '<option value="">-- Primero seleccioná destino --</option>';
     document.getElementById('servicio').value = '';
-    document.getElementById('cama').innerHTML = '<option value="">-- Seleccioná cama --</option>';
     document.getElementById('descripcion').value = '';
     document.getElementById('urgencia').value = 'normal';
+    document.getElementById('foto').value = '';
+    document.getElementById('foto-cam').value = '';
+    document.getElementById('foto-preview').style.display = 'none';
+    document.getElementById('bloque-tipo-ubicacion').style.display = 'none';
+    document.getElementById('bloque-cama').style.display = 'none';
+    document.getElementById('bloque-area').style.display = 'none';
+    document.getElementById('btn-hab').classList.remove('activo');
+    document.getElementById('btn-area').classList.remove('activo');
+    tipoUbicacion = null;
 
     setTimeout(() => { msgEl.textContent = ''; }, 4000);
-
   } catch (e) {
     msgEl.style.color = '#C8102E';
     msgEl.textContent = '❌ Error al enviar. Intentá de nuevo.';
     console.error(e);
+  } finally {
+    btn.disabled = false;
   }
 };
 
@@ -163,7 +271,7 @@ onValue(ref(db, 'hosteleria/solicitudes'), (snapshot) => {
 window.aplicarFiltros = () => {
   const filtroDestino = document.getElementById('filtro-destino').value;
   const filtroEstado  = document.getElementById('filtro-estado').value;
-  let filtradas = todasLasSolicitudes.filter(s =>
+  const filtradas = todasLasSolicitudes.filter(s =>
     (!filtroDestino || s.destino === filtroDestino) &&
     (!filtroEstado  || s.estado  === filtroEstado)
   );
@@ -180,23 +288,44 @@ function renderSolicitudes(lista) {
     <div class="solicitud-card">
       <div class="solicitud-header">
         <span class="solicitud-tipo">
-          ${s.destino === 'mantenimiento' ? '🔧' : '🧹'} ${s.tipo}
+          ${s.destino === 'mantenimiento' ? '🔧' : '🧹'} ${esc(s.tipo)}
         </span>
         <div>
-          <span class="badge badge-${s.estado}">${estadoLabel(s.estado)}</span>
+          <span class="badge badge-${esc(s.estado)}">${estadoLabel(s.estado)}</span>
           ${s.urgencia === 'urgente' ? '<span class="badge badge-urgente">🚨 Urgente</span>' : ''}
         </div>
       </div>
       <div class="solicitud-info">
-        <span>🏥 ${s.ubicacion || s.servicio}</span>
-        <span>🛏 Cama ${s.cama}</span>
-        <span>👤 ${s.creadoPor}</span>
-        <span>🕐 ${s.fechaCreacion}</span>
+        <span>📍 ${esc(s.ubicacion || s.servicio)}</span>
+        <span>👤 ${esc(s.creadoPor)}</span>
+        <span>🕐 ${esc(s.fechaCreacion)}</span>
       </div>
-      <div class="solicitud-desc">${s.descripcion}</div>
+      <div class="solicitud-desc">${esc(s.descripcion)}</div>
+
+      <div class="fotos">
+        ${s.fotoSolicitud ? `
+          <a href="${esc(s.fotoSolicitud)}" target="_blank" class="foto-item">
+            <img src="${esc(s.fotoSolicitud)}" alt="Foto del problema" />
+            <small>📷 Problema</small>
+          </a>` : ''}
+        ${s.fotoResolucion ? `
+          <a href="${esc(s.fotoResolucion)}" target="_blank" class="foto-item">
+            <img src="${esc(s.fotoResolucion)}" alt="Foto del trabajo" />
+            <small>✅ Trabajo realizado</small>
+          </a>` : ''}
+      </div>
+
       <div class="solicitud-acciones">
         ${s.estado === 'pendiente' ? `<button class="btn-estado btn-en_proceso" onclick="cambiarEstado('${s.id}', 'en_proceso')">▶ En Proceso</button>` : ''}
         ${s.estado !== 'resuelto' ? `<button class="btn-estado btn-resuelto" onclick="cambiarEstado('${s.id}', 'resuelto')">✅ Resuelto</button>` : ''}
+        <label class="btn-estado btn-foto">
+          📷 Sacar foto del trabajo
+          <input type="file" accept="image/*" capture="environment" hidden onchange="subirFotoResolucion('${s.id}', this)" />
+        </label>
+        <label class="btn-estado btn-foto">
+          🖼 Galería
+          <input type="file" accept="image/*" hidden onchange="subirFotoResolucion('${s.id}', this)" />
+        </label>
       </div>
     </div>
   `).join('');
@@ -208,4 +337,21 @@ function estadoLabel(estado) {
 
 window.cambiarEstado = (id, nuevoEstado) => {
   update(ref(db, `hosteleria/solicitudes/${id}`), { estado: nuevoEstado });
+};
+
+window.subirFotoResolucion = async (id, input) => {
+  const file = input.files[0];
+  if (!file) return;
+  const label = input.closest('label');
+  label.firstChild.textContent = '⏳ Subiendo... ';
+  try {
+    const url = await subirImagen(file);
+    await update(ref(db, `hosteleria/solicitudes/${id}`), {
+      fotoResolucion: url,
+      fotoResolucionPor: usuario
+    });
+  } catch (e) {
+    console.error(e);
+    alert('❌ No se pudo subir la foto. Intentá de nuevo.');
+  }
 };
