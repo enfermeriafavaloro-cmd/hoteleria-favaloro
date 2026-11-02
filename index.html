@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hostelería - Fundación Favaloro</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <div class="header-inner">
+        <h1>🏨 Gestión de Hostelería</h1>
+        <span id="usuarioActual"></span>
+      </div>
+    </header>
+
+    <main>
+      <!-- TABS -->
+      <div class="tabs">
+        <button class="tab active" onclick="mostrarTab('nueva')">
+          📋 Nueva Solicitud
+        </button>
+        <button class="tab" onclick="mostrarTab('panel')">
+          📊 Panel de Solicitudes
+        </button>
+      </div>
+
+      <!-- TAB: NUEVA SOLICITUD -->
+      <div id="tab-nueva" class="tab-content active">
+        <div class="card">
+          <h2>Nueva Solicitud</h2>
+
+          <div class="form-group">
+            <label>Destino *</label>
+            <select id="destino" onchange="actualizarTipos()">
+              <option value="">-- Seleccioná --</option>
+              <option value="mantenimiento">🔧 Mantenimiento</option>
+              <option value="limpieza">🧹 Limpieza</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Tipo de solicitud *</label>
+            <select id="tipo">
+              <option value="">-- Primero seleccioná destino --</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Servicio *</label>
+            <select id="servicio" onchange="actualizarCamas()">
+              <option value="">-- Seleccioná servicio --</option>
+              <option value="7*A">7*A</option>
+              <option value="7*B">7*B</option>
+              <option value="8*A">8*A</option>
+              <option value="8*B">8*B</option>
+              <option value="9*A">9*A</option>
+              <option value="9*B">9*B</option>
+              <option value="UTI 2">UTI 2</option>
+              <option value="TELEMETRIA">TELEMETRIA</option>
+              <option value="UTI 1">UTI 1</option>
+              <option value="RCV-UCO">RCV-UCO</option>
+              <option value="GUARDIA">GUARDIA</option>
+              <option value="CIRUGIA Y PROCEDIMIENTOS">
+                CIRUGIA Y PROCEDIMIENTOS
+              </option>
+              <option value="PROCEDIMIENTOS AMB 1*P">
+                PROCEDIMIENTOS AMB 1*P
+              </option>
+              <option value="UCO">UCO</option>
+              <option value="INT 1*P">INT 1*P</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Cama (opcional)</label>
+            <select id="cama">
+              <option value="">-- Seleccioná cama --</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Descripción *</label>
+            <textarea
+              id="descripcion"
+              rows="3"
+              placeholder="Describí el problema o tarea..."
+            ></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>Urgencia *</label>
+            <select id="urgencia">
+              <option value="normal">Normal</option>
+              <option value="urgente">🚨 Urgente</option>
+            </select>
+          </div>
+
+          <button class="btn-primary" onclick="enviarSolicitud()">
+            Enviar Solicitud
+          </button>
+          <div id="mensaje-envio"></div>
+        </div>
+      </div>
+
+      <!-- TAB: PANEL -->
+      <div id="tab-panel" class="tab-content">
+        <div class="card">
+          <h2>Panel de Solicitudes</h2>
+
+          <div class="filtros">
+            <select id="filtro-destino" onchange="aplicarFiltros()">
+              <option value="">Todos los destinos</option>
+              <option value="mantenimiento">🔧 Mantenimiento</option>
+              <option value="limpieza">🧹 Limpieza</option>
+            </select>
+            <select id="filtro-estado" onchange="aplicarFiltros()">
+              <option value="">Todos los estados</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="en_proceso">En Proceso</option>
+              <option value="resuelto">Resuelto</option>
+            </select>
+          </div>
+
+          <div id="lista-solicitudes">
+            <p class="cargando">Cargando solicitudes...</p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script type="module" src="script.js"></script>
+  </body>
+</html>
