@@ -217,7 +217,7 @@ window.enviarSolicitud = async () => {
       timestamp: Date.now()
     };
 
-    await push(ref(db, 'hosteleria/solicitudes'), solicitud);
+    await push(ref(db, 'hoteleria/solicitudes'), solicitud);
 
     if (destino === 'mantenimiento') {
       const asunto = encodeURIComponent(`[${urgencia.toUpperCase()}] Mantenimiento - ${ubicacion}`);
@@ -259,7 +259,7 @@ window.enviarSolicitud = async () => {
 // ── PANEL EN TIEMPO REAL ──────────────────────────────────
 let todasLasSolicitudes = [];
 
-onValue(ref(db, 'hosteleria/solicitudes'), (snapshot) => {
+onValue(ref(db, 'hoteleria/solicitudes'), (snapshot) => {
   todasLasSolicitudes = [];
   snapshot.forEach(child => {
     todasLasSolicitudes.push({ id: child.key, ...child.val() });
@@ -336,7 +336,7 @@ function estadoLabel(estado) {
 }
 
 window.cambiarEstado = (id, nuevoEstado) => {
-  update(ref(db, `hosteleria/solicitudes/${id}`), { estado: nuevoEstado });
+  update(ref(db, `hoteleria/solicitudes/${id}`), { estado: nuevoEstado });
 };
 
 window.subirFotoResolucion = async (id, input) => {
@@ -346,7 +346,7 @@ window.subirFotoResolucion = async (id, input) => {
   label.firstChild.textContent = '⏳ Subiendo... ';
   try {
     const url = await subirImagen(file);
-    await update(ref(db, `hosteleria/solicitudes/${id}`), {
+    await update(ref(db, `hoteleria/solicitudes/${id}`), {
       fotoResolucion: url,
       fotoResolucionPor: usuario
     });
